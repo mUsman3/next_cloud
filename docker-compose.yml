@@ -1,146 +1,80 @@
-version: '3.2'
+version: "3"
 
 services:
-  db:
-    image: postgres
-    restart: always
+  proxy:
+    image: jwilder/nginx-proxy:alpine
+    labels:
+      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy=true"
+    container_name: nextcloud-proxy
+    networks:
+      - nextcloud_network
+    ports:
+      - 80:80
+      - 443:443
     volumes:
-      - db:/var/lib/postgresql/data
+      - ./proxy/conf.d:/etc/nginx/conf.d:rw
+      - ./proxy/vhost.d:/etc/nginx/vhost.d:rw
+      - ./proxy/html:/usr/share/nginx/html:rw
+      - ./proxy/certs:/etc/nginx/certs:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    restart: unless-stopped
+
+  letsencrypt:
+    image: jrcs/letsencrypt-nginx-proxy-companion
+    container_name: nextcloud-letsencrypt
+    depends_on:
+      - proxy
+    networks:
+      - nextcloud_network
+    volumes:
+      - ./proxy/certs:/etc/nginx/certs:rw
+      - ./proxy/vhost.d:/etc/nginx/vhost.d:rw
+      - ./proxy/html:/usr/share/nginx/html:rw
+      - /etc/localtime:/etc/localtime:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+  db:
+    image: mariadb
+    container_name: nextcloud-mariadb
+    networks:
+      - nextcloud_network
+    volumes:
+      - db:/var/lib/mysql
+      - /etc/localtime:/etc/localtime:ro
     environment:
-      - POSTGRES_DB_FILE=/run/secrets/postgres_db
-      - POSTGRES_USER_FILE=/run/secrets/postgres_user
-      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
-    secrets:
-      - postgres_db
-      - postgres_password
-      - postgres_user
+      - MYSQL_ROOT_PASSWORD=toor
+      - MYSQL_PASSWORD=mysql
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+    restart: unless-stopped
 
   app:
-    image: nextcloud
-    restart: always
-    ports:
-      - 8080:80
+    image: nextcloud:latest
+    container_name: nextcloud-app
+    networks:
+      - nextcloud_network
+    depends_on:
+      - letsencrypt
+      - proxy
+      - db
     volumes:
       - nextcloud:/var/www/html
+      - ./app/config:/var/www/html/config
+      - ./app/custom_apps:/var/www/html/custom_apps
+      - ./app/data:/var/www/html/data
+      - ./app/themes:/var/www/html/themes
+      - /etc/localtime:/etc/localtime:ro
     environment:
-      - POSTGRES_HOST=db
-      - POSTGRES_DB_FILE=/run/secrets/postgres_db
-      - POSTGRES_USER_FILE=/run/secrets/postgres_user
-      - POSTGRES_PASSWORD_FILE=/run/secrets/postgres_password
-      - NEXTCLOUD_ADMIN_PASSWORD_FILE=/run/secrets/nextcloud_admin_password
-      - NEXTCLOUD_ADMIN_USER_FILE=/run/secrets/nextcloud_admin_user
-    depends_on:
-      - db
-    secrets:
-      - nextcloud_admin_password
-      - nextcloud_admin_user
-      - postgres_db
-      - postgres_password
-      - postgres_user
+      - VIRTUAL_HOST=nextcloud.kali.local
+      - LETSENCRYPT_HOST=nextcloud.kali.local
+      - LETSENCRYPT_EMAIL=usman59228@gmail.com
+    restart: unless-stopped
 
 volumes:
-  db:
   nextcloud:
+  db:
 
-secrets:
-  nextcloud_admin_password:
-    file: ./nextcloud_admin_password.txt # put admin password to this file
-  nextcloud_admin_user:
-    file: ./nextcloud_admin_user.txt # put admin username to this file
-  postgres_db:
-    file: ./postgres_db.txt # put postgresql db name to this file
-  postgres_password:
-    file: ./postgres_password.txt # put postgresql password to this file
-  postgres_user:
-    file: ./postgres_user.txt # put postgresql username to this file
-
-
-
-# version: '3' 
-
-# services:
-
-#   db:
-#     image: mariadb
-#     container_name: nextcloud-mariadb1
-#     networks:
-#       - nextcloud_network
-#     volumes:
-#       - db:/var/lib/mysql
-#       - /etc/localtime:/etc/localtime:ro
-#     environment:
-#       - MYSQL_ROOT_PASSWORD=toor
-#       - MYSQL_PASSWORD=mysql
-#       - MYSQL_DATABASE=nextcloud
-#       - MYSQL_USER=nextcloud
-#     restart: unless-stopped
-  
-#   app:
-#     image: nextcloud:latest
-#     container_name: nextcloud-app1
-#     networks:
-#       - nextcloud_network
-#     ports:
-#       - 8080:80
-#     depends_on:
-#       - db
-#     volumes:
-#       - nextcloud:/var/www/html
-#       - ./app/config:/var/www/html/config
-#       - ./app/custom_apps:/var/www/html/custom_apps
-#       - ./app/data:/var/www/html/data
-#       - ./app/themes:/var/www/html/themes
-#       - /etc/localtime:/etc/localtime:ro
-#     environment:
-#       - VIRTUAL_HOST=nextcloud.YOUR-DOMAIN
-#       - LETSENCRYPT_HOST=nextcloud.YOUR-DOMAIN
-#       - LETSENCRYPT_EMAIL=YOUR-EMAIL
-#     restart: unless-stopped
-
-# volumes:
-#   nextcloud:
-#   db:
-
-# networks:
-#   nextcloud_network:
-  
-  
-  
-# version: '2'
-
-# volumes:
-#   nextcloud:
-#   db:
-
-# services:
-#   db:
-#     image: mariadb
-#     command: --transaction-isolation=READ-COMMITTED --binlog-format=ROW
-#     restart: always
-#     volumes:
-#       - db:/var/lib/mysql
-#     environment:
-#       - MYSQL_ROOT_PASSWORD=
-#       - MYSQL_PASSWORD=
-#       - MYSQL_DATABASE=nextcloud
-#       - MYSQL_USER=nextcloud
-
-#   app:
-#     image: nextcloud:fpm
-#     links:
-#       - db
-#     volumes:
-#       - nextcloud:/var/www/html
-#     restart: always
-
-#   web:
-#     image: nginx
-#     ports:
-#       - 8080:80
-#     links:
-#       - app
-#     volumes:
-#       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-#     volumes_from:
-#       - app
-#     restart: always
+networks:
+  nextcloud_network:
