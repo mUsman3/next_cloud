@@ -67,9 +67,9 @@ services:
       - ./app/themes:/var/www/html/themes
       - /etc/localtime:/etc/localtime:ro
     environment:
-      - VIRTUAL_HOST=nextcloud.kali.local
-      - LETSENCRYPT_HOST=nextcloud.kali.local
-      - LETSENCRYPT_EMAIL=usman59228@gmail.com
+      - VIRTUAL_HOST=nextcloud.your-domain
+      - LETSENCRYPT_HOST=nextcloud.your-domain
+      - LETSENCRYPT_EMAIL=your-mail
     restart: unless-stopped
 
 volumes:
